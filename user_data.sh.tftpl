@@ -1,0 +1,37 @@
+#!/bin/bash
+# Plantilla de user_data: Terraform reemplaza repo_url y app_port antes de mandarla a EC2.
+# Corre UNA vez, como root, en el primer arranque de la instancia.
+# Log para depurar dentro de la instancia: /var/log/cloud-init-output.log
+set -euxo pipefail
+
+# 1. Instalar lo que la imagen de Ubuntu no trae
+apt-get update -y
+DEBIAN_FRONTEND=noninteractive apt-get install -y git python3-venv python3-pip
+
+# 2. Clonar el repo
+git clone ${repo_url} /opt/todo-app
+
+# 3. Instalar dependencias en un entorno virtual
+python3 -m venv /opt/todo-app/venv
+/opt/todo-app/venv/bin/pip install -r /opt/todo-app/requirements.txt
+chown -R ubuntu:ubuntu /opt/todo-app
+
+# 4. Registrar la app como servicio de systemd para que arranque en cada boot
+cat > /etc/systemd/system/todo-app.service <<'SERVICE'
+[Unit]
+Description=API to-do list (Flask) en el puerto ${app_port}
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/opt/todo-app
+ExecStart=/opt/todo-app/venv/bin/python app.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+SERVICE
+
+systemctl daemon-reload
+systemctl enable --now todo-app

@@ -55,3 +55,25 @@ bash teardown.sh   # borra la instancia, el security group y el key pair
 | `teardown.sh`  | Borra todo lo creado (usa los IDs guardados en `.ec2-state`) |
 
 La app queda en `http://<IP-pública>:5000/tasks`.
+
+## Desplegar en EC2 con Terraform
+
+Toda la infraestructura (key pair, security group e instancia) y el despliegue de la app salen de Terraform.
+El `user_data` de la instancia clona este repo, instala dependencias y registra la app como servicio de systemd para que arranque en cada boot.
+
+| Archivo               | Qué contiene |
+|-----------------------|--------------|
+| `main.tf`             | Provider, key pair, security group e instancia EC2 |
+| `variables.tf`        | Región, AMI, tipo de instancia, URL del repo, puerto |
+| `outputs.tf`          | IP pública, URL de `/tasks` y comando SSH |
+| `user_data.sh.tftpl`  | Script de arranque: `git clone`, `pip install` y servicio systemd |
+
+```bash
+terraform init      # descarga los providers
+terraform plan      # muestra qué se va a crear
+terraform apply     # lo crea (escribe "yes")
+curl http://<IP>:5000/tasks
+terraform destroy   # borra todo al terminar
+```
+
+`terraform.tfstate` no se sube al repo (está en `.gitignore`) porque puede contener información sensible, incluida la llave privada.
