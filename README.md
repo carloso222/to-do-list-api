@@ -140,3 +140,4 @@ curl http://<IP>:5000/version   # {"version": "v1.0.0"}
 ```
 
 > Un release creado con `GITHUB_TOKEN` no dispara el evento `release` en otros workflows (GitHub lo evita para no generar ciclos), por eso `release.yml` lanza `deploy.yml` con `gh workflow run`.
+
