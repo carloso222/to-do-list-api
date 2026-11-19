@@ -1,12 +1,12 @@
 #!/bin/bash
-# Plantilla de user_data: Terraform reemplaza repo_url y app_port antes de mandarla a EC2.
+# Plantilla de user_data: Terraform reemplaza repo_url, app_port, region y db_secret_id antes de mandarla a EC2.
 # Corre UNA vez, como root, en el primer arranque de la instancia.
 # Log para depurar dentro de la instancia: /var/log/cloud-init-output.log
 set -euxo pipefail
 
-# 1. Instalar lo que la imagen de Ubuntu no trae
+# 1. Instalar lo que la imagen de Ubuntu no trae (postgresql-client para conectarnos a RDS con psql)
 apt-get update -y
-DEBIAN_FRONTEND=noninteractive apt-get install -y git python3-venv python3-pip
+DEBIAN_FRONTEND=noninteractive apt-get install -y git python3-venv python3-pip postgresql-client
 
 # 2. Clonar el repo
 git clone ${repo_url} /opt/todo-app
@@ -16,22 +16,43 @@ python3 -m venv /opt/todo-app/venv
 /opt/todo-app/venv/bin/pip install -r /opt/todo-app/requirements.txt
 chown -R ubuntu:ubuntu /opt/todo-app
 
-# 4. Registrar la app como servicio de systemd para que arranque en cada boot
+# 4. Registrar la app como servicio de systemd para que arranque en cada boot.
+#    Solo le pasamos el NOMBRE del secreto; la app pide usuario y contraseña a Secrets Manager.
 cat > /etc/systemd/system/todo-app.service <<'SERVICE'
 [Unit]
-Description=API to-do list (Flask) en el puerto ${app_port}
+Description=API to-do list (Flask + RDS) en el puerto ${app_port}
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 User=ubuntu
 WorkingDirectory=/opt/todo-app
+Environment=DB_SECRET_ID=${db_secret_id}
+Environment=AWS_REGION=${region}
 ExecStart=/opt/todo-app/venv/bin/python app.py
 Restart=always
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
 SERVICE
+
+# 5. Comando "todo-db": abre psql en RDS usando las credenciales de Secrets Manager
+cat > /usr/local/bin/todo-db <<'HELPER'
+#!/bin/bash
+# Uso: todo-db                              (consola interactiva)
+#      todo-db -c "SELECT * FROM tasks;"    (una consulta)
+eval "$(/opt/todo-app/venv/bin/python - <<'PY'
+import boto3, json, shlex
+s = json.loads(boto3.client("secretsmanager", region_name="${region}").get_secret_value(SecretId="${db_secret_id}")["SecretString"])
+env = {"PGHOST": s["host"], "PGPORT": s["port"], "PGUSER": s["username"], "PGPASSWORD": s["password"], "PGDATABASE": s["dbname"]}
+for k, v in env.items():
+    print("export %s=%s" % (k, shlex.quote(str(v))))
+PY
+)"
+exec psql "$@"
+HELPER
+chmod 755 /usr/local/bin/todo-db
 
 systemctl daemon-reload
 systemctl enable --now todo-app

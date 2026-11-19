@@ -18,6 +18,10 @@ terraform {
       source  = "hashicorp/http"
       version = "~> 3.4"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.6"
+    }
   }
 }
 
@@ -91,21 +95,115 @@ resource "aws_security_group" "app" {
   }
 }
 
+# ---------- Base de datos: Amazon RDS (PostgreSQL) ----------
+# Contraseña aleatoria: nadie la escribe ni la ve; se guarda en Secrets Manager.
+# OJO: también queda en terraform.tfstate, otra razón para NO subir el tfstate al repo.
+resource "random_password" "db" {
+  length  = 24
+  special = false
+}
+
+# Security group de la BD: solo acepta PostgreSQL (5432) que venga del security group de la app.
+# Así ni Internet ni otra máquina pueden conectarse a la base de datos.
+resource "aws_security_group" "db" {
+  name        = "${var.nombre}-db-sg"
+  description = "PostgreSQL solo desde el security group de la app"
+  vpc_id      = data.aws_vpc.default.id
+
+  ingress {
+    description     = "PostgreSQL desde la EC2 de la app"
+    from_port       = 5432
+    to_port         = 5432
+    protocol        = "tcp"
+    security_groups = [aws_security_group.app.id]
+  }
+
+  egress {
+    description = "Todo el trafico de salida"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "${var.nombre}-db-sg"
+  }
+}
+
+resource "aws_db_instance" "todo" {
+  identifier        = "${var.nombre}-db"
+  engine            = "postgres"
+  engine_version    = var.db_engine_version
+  instance_class    = var.db_instance_class
+  allocated_storage = 20
+
+  db_name  = "todo"
+  username = "todoadmin"
+  password = random_password.db.result
+
+  vpc_security_group_ids = [aws_security_group.db.id]
+  publicly_accessible    = false # la BD no tiene IP pública
+
+  # Para el sandbox: sin respaldos ni snapshot final, así se crea y se destruye más rápido
+  backup_retention_period = 0
+  skip_final_snapshot     = true
+  deletion_protection     = false
+  apply_immediately       = true
+
+  tags = {
+    Name = "${var.nombre}-db"
+  }
+}
+
+# ---------- Secrets Manager: credenciales de la BD ----------
+# La app lee este secreto al arrancar; no hay usuario ni contraseña en el código ni en el repo.
+resource "aws_secretsmanager_secret" "db" {
+  name        = "${var.nombre}-db-credentials"
+  description = "Credenciales de la BD RDS de la app to-do"
+
+  # Borrar de inmediato al hacer destroy (si no, AWS lo guarda 7-30 dias y el nombre queda ocupado)
+  recovery_window_in_days = 0
+}
+
+resource "aws_secretsmanager_secret_version" "db" {
+  secret_id = aws_secretsmanager_secret.db.id
+  secret_string = jsonencode({
+    engine   = "postgres"
+    host     = aws_db_instance.todo.address
+    port     = aws_db_instance.todo.port
+    dbname   = aws_db_instance.todo.db_name
+    username = aws_db_instance.todo.username
+    password = random_password.db.result
+  })
+}
+
 # ---------- Instancia EC2 ----------
 resource "aws_instance" "app" {
   ami                    = var.ami_id
   instance_type          = var.instance_type
   key_name               = aws_key_pair.llave.key_name
   vpc_security_group_ids = [aws_security_group.app.id]
-  iam_instance_profile   = "LabInstanceProfile"
+
+  # IAM role: así un servicio de AWS (EC2) obtiene permiso para usar otro (Secrets Manager).
+  # El Learner Lab no deja crear roles, así que usamos LabInstanceProfile (rol LabRole).
+  # En una cuenta normal crearías un aws_iam_role con una policy que permita
+  # "secretsmanager:GetSecretValue" solo sobre aws_secretsmanager_secret.db.arn,
+  # y un aws_iam_instance_profile para asignarlo a la instancia.
+  iam_instance_profile = "LabInstanceProfile"
 
   # user_data: al arrancar, clona el repo, instala dependencias y levanta la app como servicio
   user_data = templatefile("${path.module}/user_data.sh.tftpl", {
-    repo_url = var.repo_url
-    app_port = var.app_port
+    repo_url     = var.repo_url
+    app_port     = var.app_port
+    region       = var.region
+    db_secret_id = aws_secretsmanager_secret.db.name
   })
   # Si cambias el user_data, Terraform recrea la instancia (el user_data solo corre en el primer boot)
   user_data_replace_on_change = true
+
+  # La app necesita que la BD y el secreto ya existan cuando arranca
+  depends_on = [aws_secretsmanager_secret_version.db]
 
   tags = {
     Name = var.nombre

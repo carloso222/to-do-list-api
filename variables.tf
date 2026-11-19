@@ -33,3 +33,15 @@ variable "app_port" {
   description = "Puerto donde escucha la app (debe coincidir con app.py)"
   default     = 5000
 }
+
+variable "db_instance_class" {
+  type        = string
+  description = "Tipo de instancia de RDS (Learner Lab: db.t3 micro/small/medium)"
+  default     = "db.t3.micro"
+}
+
+variable "db_engine_version" {
+  type        = string
+  description = "Versión mayor de PostgreSQL (AWS elige la versión menor por default)"
+  default     = "17"
+}

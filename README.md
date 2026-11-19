@@ -7,7 +7,7 @@ API sencilla en Python + Flask para la actividad de EC2 (Desarrollo en la Nube, 
 | GET    | `/tasks` | Regresa la lista de tareas                                    |
 | POST   | `/tasks` | Agrega una tarea. Body: `{"tarea": "resolver actividad en equipo"}` |
 
-Las tareas se guardan en memoria (una lista de Python), así que se pierden al reiniciar el servidor.
+Las tareas se guardan en PostgreSQL (Amazon RDS). La app lee las credenciales de AWS Secrets Manager (variable `DB_SECRET_ID`); si esa variable no existe, por ejemplo en tu compu, usa una lista en memoria.
 
 ## Correr en local (Windows, PowerShell)
 
@@ -63,16 +63,17 @@ El `user_data` de la instancia clona este repo, instala dependencias y registra 
 
 | Archivo               | Qué contiene |
 |-----------------------|--------------|
-| `main.tf`             | Provider, key pair, security group e instancia EC2 |
+| `main.tf`             | Provider, key pair, security groups (app y BD), RDS PostgreSQL, secreto en Secrets Manager e instancia EC2 |
 | `variables.tf`        | Región, AMI, tipo de instancia, URL del repo, puerto |
-| `outputs.tf`          | IP pública, URL de `/tasks` y comando SSH |
-| `user_data.sh.tftpl`  | Script de arranque: `git clone`, `pip install` y servicio systemd |
+| `outputs.tf`          | IP pública, URL de `/tasks`, comando SSH, endpoint de la BD y comando para consultarla |
+| `user_data.sh.tftpl`  | Script de arranque: `git clone`, `pip install`, servicio systemd y comando `todo-db` (psql a RDS) |
 
 ```bash
 terraform init      # descarga los providers
 terraform plan      # muestra qué se va a crear
 terraform apply     # lo crea (escribe "yes")
 curl http://<IP>:5000/tasks
+terraform output -raw consultar_db   # comando para ver la tabla tasks en RDS
 terraform destroy   # borra todo al terminar
 ```
 
