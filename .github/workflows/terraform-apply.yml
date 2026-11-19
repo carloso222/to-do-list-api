@@ -1,0 +1,93 @@
+# Crea toda la infraestructura (EC2 + RDS + Secrets Manager + security groups) con Terraform.
+# Se corre a mano: pestaña Actions -> "Terraform apply" -> Run workflow.
+name: Terraform apply
+
+on:
+  workflow_dispatch:
+    inputs:
+      ssh_cidr:
+        description: "Desde dónde se permite SSH (ej. tu IP/32). Vacío = 0.0.0.0/0"
+        required: false
+        default: "0.0.0.0/0"
+
+permissions:
+  contents: read
+
+# Nunca dos ejecuciones de Terraform al mismo tiempo (apply y destroy comparten el grupo)
+concurrency:
+  group: terraform
+  cancel-in-progress: false
+
+env:
+  # Credenciales del Learner Lab guardadas en GitHub Secrets (se actualizan en cada sandbox nuevo)
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+  AWS_REGION: us-east-1
+  AWS_DEFAULT_REGION: us-east-1
+  TF_IN_AUTOMATION: "true"
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v5
+
+      - name: Instalar Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Verificar credenciales de AWS
+        run: aws sts get-caller-identity
+
+      - name: Crear el bucket S3 del tfstate (si no existe)
+        id: bucket
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          BUCKET="to-do-list-api-tfstate-${ACCOUNT_ID}"
+          if aws s3api head-bucket --bucket "$BUCKET" 2>/dev/null; then
+            echo "El bucket $BUCKET ya existe"
+          else
+            echo "Creando bucket $BUCKET"
+            aws s3api create-bucket --bucket "$BUCKET" --region "$AWS_REGION"
+            aws s3api put-bucket-versioning --bucket "$BUCKET" \
+              --versioning-configuration Status=Enabled
+            aws s3api put-public-access-block --bucket "$BUCKET" \
+              --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+          fi
+          echo "name=$BUCKET" >> "$GITHUB_OUTPUT"
+
+      - name: terraform init
+        run: terraform init -input=false -backend-config="bucket=${{ steps.bucket.outputs.name }}"
+
+      - name: terraform validate
+        run: terraform validate
+
+      - name: terraform plan
+        env:
+          SSH_CIDR: ${{ inputs.ssh_cidr }}
+        run: terraform plan -input=false -out=tfplan -var="ssh_cidr=${SSH_CIDR:-0.0.0.0/0}"
+
+      - name: terraform apply
+        run: terraform apply -input=false tfplan
+
+      - name: Resumen (IP de la EC2)
+        run: |
+          IP=$(terraform output -raw public_ip)
+          URL=$(terraform output -raw url_tasks)
+          echo "IP pública de la EC2: $IP"
+          echo "URL: $URL"
+          {
+            echo "## Infraestructura creada"
+            echo ""
+            echo "| Dato | Valor |"
+            echo "|---|---|"
+            echo "| IP pública EC2 | \`$IP\` |"
+            echo "| URL de la API | $URL |"
+            echo "| Endpoint RDS | \`$(terraform output -raw db_endpoint)\` |"
+            echo ""
+            echo "Siguiente paso: guarda la IP en GitHub Secrets como **EC2_HOST**."
+            echo "La app tarda 1 a 2 minutos más en arrancar (user_data)."
+          } >> "$GITHUB_STEP_SUMMARY"

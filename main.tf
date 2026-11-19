@@ -1,5 +1,15 @@
 terraform {
-  required_version = ">= 1.5"
+  # 1.10+ para poder usar el lockfile nativo de S3 (sin DynamoDB)
+  required_version = ">= 1.10"
+
+  # El tfstate vive en S3 para que GitHub Actions (y tu compu) compartan el mismo estado.
+  # El bucket se pasa en "terraform init -backend-config=bucket=..." porque su nombre lleva el ID de la cuenta.
+  backend "s3" {
+    key          = "to-do-list-api/terraform.tfstate"
+    region       = "us-east-1"
+    encrypt      = true
+    use_lockfile = true # evita que dos "apply" corran al mismo tiempo sobre el mismo estado
+  }
 
   required_providers {
     aws = {
@@ -25,7 +35,8 @@ terraform {
   }
 }
 
-# Usa las credenciales del Learner Lab que están en ~/.aws/credentials
+# Credenciales: en tu compu salen de ~/.aws/credentials; en GitHub Actions de las variables
+# de entorno AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY y AWS_SESSION_TOKEN (GitHub Secrets)
 provider "aws" {
   region = var.region
 }
@@ -35,9 +46,15 @@ data "aws_vpc" "default" {
   default = true
 }
 
-# Tu IP pública, para permitir SSH solo desde tu compu
+# Tu IP pública, para permitir SSH solo desde tu compu cuando corres Terraform localmente
 data "http" "mi_ip" {
   url = "https://checkip.amazonaws.com"
+}
+
+locals {
+  # Si ssh_cidr viene vacío usamos la IP de quien corre Terraform.
+  # En GitHub Actions esa sería la IP del runner, por eso el workflow sí manda ssh_cidr.
+  ssh_cidr = var.ssh_cidr != "" ? var.ssh_cidr : "${chomp(data.http.mi_ip.response_body)}/32"
 }
 
 # ---------- Key pair ----------
@@ -61,15 +78,15 @@ resource "local_sensitive_file" "llave_privada" {
 # ---------- Security group ----------
 resource "aws_security_group" "app" {
   name        = "${var.nombre}-sg"
-  description = "SSH desde mi IP y puerto de la app abierto"
+  description = "SSH restringido y puerto de la app abierto"
   vpc_id      = data.aws_vpc.default.id
 
   ingress {
-    description = "SSH solo desde mi IP"
+    description = "SSH"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["${chomp(data.http.mi_ip.response_body)}/32"]
+    cidr_blocks = [local.ssh_cidr]
   }
 
   ingress {

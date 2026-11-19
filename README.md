@@ -78,3 +78,29 @@ terraform destroy   # borra todo al terminar
 ```
 
 `terraform.tfstate` no se sube al repo (está en `.gitignore`) porque puede contener información sensible, incluida la llave privada.
+
+## Deploy con un botón (GitHub Actions)
+
+| Workflow | Qué hace |
+|---|---|
+| `Terraform apply` (`.github/workflows/terraform-apply.yml`) | Crea el bucket S3 del tfstate si no existe, y corre `init`, `plan` y `apply`. Al final muestra la IP de la EC2 en el resumen |
+| `Terraform destroy` (`.github/workflows/terraform-destroy.yml`) | Corre `terraform destroy` (hay que escribir `destruir` para confirmar) |
+
+Los dos se corren a mano desde la pestaña **Actions** (trigger `workflow_dispatch`).
+
+**tfstate:** se guarda en S3, en el bucket `to-do-list-api-tfstate-<ID de la cuenta>` con versionado y lockfile nativo, así que GitHub Actions y tu compu comparten el mismo estado.
+
+**GitHub Secrets necesarios** (Settings → Secrets and variables → Actions), que se actualizan en cada sandbox nuevo del Learner Lab:
+
+| Secret | Valor |
+|---|---|
+| `AWS_ACCESS_KEY_ID` | De *AWS Details* en el Learner Lab |
+| `AWS_SECRET_ACCESS_KEY` | De *AWS Details* en el Learner Lab |
+| `AWS_SESSION_TOKEN` | De *AWS Details* en el Learner Lab |
+| `EC2_HOST` | IP pública que muestra el workflow de apply al terminar |
+
+**Correr Terraform en tu compu** usando el mismo estado en S3:
+
+```bash
+terraform init -reconfigure -backend-config="bucket=to-do-list-api-tfstate-<ID de la cuenta>"
+```

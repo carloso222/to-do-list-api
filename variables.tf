@@ -45,3 +45,14 @@ variable "db_engine_version" {
   description = "Versión mayor de PostgreSQL (AWS elige la versión menor por default)"
   default     = "17"
 }
+
+variable "ssh_cidr" {
+  type        = string
+  description = "Rango permitido para SSH (ej. 189.1.2.3/32). Vacío = la IP de quien corre Terraform"
+  default     = ""
+
+  validation {
+    condition     = var.ssh_cidr == "" || can(cidrhost(var.ssh_cidr, 0))
+    error_message = "ssh_cidr debe ser un CIDR válido, por ejemplo 189.1.2.3/32 o 0.0.0.0/0."
+  }
+}
