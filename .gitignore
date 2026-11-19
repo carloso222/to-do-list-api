@@ -1,0 +1,9 @@
+# Entorno virtual de Python
+venv/
+.venv/
+__pycache__/
+*.pyc
+
+# Llaves privadas de AWS: NUNCA subirlas al repo
+*.pem
+*.ppk
