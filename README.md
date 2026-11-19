@@ -143,3 +143,41 @@ curl http://<IP>:5000/version   # {"version": "v1.0.0"}
 
 > Un release creado con `GITHUB_TOKEN` no dispara el evento `release` en otros workflows (GitHub lo evita para no generar ciclos), por eso `release.yml` lanza `deploy.yml` con `gh workflow run`.
 
+
+## Monitoreo con CloudWatch
+
+### Estrategia de monitoreo
+
+¿Cómo sabemos si la API funciona? Debe estar arriba, responder rápido, poder leer y escribir en RDS, y no regresar errores.
+
+| Métrica | Origen | Qué responde | Alarma |
+|---|---|---|---|
+| `AWS/EC2 CPUUtilization` | AWS (nativa) | ¿La instancia está saturada? | `ec2-cpu-alta`: promedio > 80% en 5 min |
+| `ToDoListApi DBErrors` | Instrumentada | ¿La app puede usar RDS? | `errores-bd`: ≥ 3 errores en 5 min |
+| `ToDoListApi Requests` + `Errores5xx` | Instrumentada | ¿Qué porcentaje de requests falla? | `tasa-errores-5xx`: `100 * Errores5xx / Requests` > 10% en 5 min (solo si hubo ≥ 5 requests) |
+| `ToDoListApi LatenciaMs` | Instrumentada | ¿La API responde lento? | `latencia-alta`: promedio > 1000 ms en 5 min |
+
+- **Instrumentación** (`metricas.py`): cada request suma a `Requests` y, si responde 5xx, a `Errores5xx`. También registra su `LatenciaMs`. Cada falla al usar la BD suma a `DBErrors`. Las métricas se acumulan en memoria y se envían con `put_metric_data` una vez por minuto, para no hacer una llamada a AWS en cada request. Los contadores se mandan aunque valgan 0, para que las gráficas no tengan huecos.
+- **Alarmas** (`cloudwatch.tf`): notifican por correo con SNS cuando se disparan (ALARM) y cuando se recuperan (OK). Usan `treat_missing_data = notBreaching`: si no llegan datos, no suenan.
+- **Dashboard** (`cloudwatch.tf`): estado de las alarmas, requests y errores, tasa de error, latencia, errores de BD, CPU de la EC2 y CPU y conexiones de RDS.
+
+Variable de GitHub necesaria: `ALARM_EMAIL` (pestaña Variables). Después de cada apply llega un correo de AWS para **confirmar la suscripción**.
+
+### Probar las alarmas
+
+```bash
+# Tráfico normal (para ver datos en el dashboard)
+bash scripts/generar-trafico.sh <IP> 60
+
+# CPU alta: 2 procesos al 100% por 10 minutos (t3.micro tiene 2 vCPU)
+ssh -i ~/.ssh/to-do-list-api ubuntu@<IP> "for i in 1 2; do timeout 600 yes > /dev/null & done"
+
+# Errores de BD, tasa de errores y latencia: detener RDS, generar tráfico y volver a encenderlo
+aws rds stop-db-instance --db-instance-identifier to-do-list-api-db
+aws rds wait db-instance-stopped --db-instance-identifier to-do-list-api-db
+bash scripts/generar-trafico.sh <IP> 40
+aws rds start-db-instance --db-instance-identifier to-do-list-api-db
+
+# Probar solo la notificación por correo (sin provocar la falla)
+aws cloudwatch set-alarm-state --alarm-name to-do-list-api-latencia-alta --state-value ALARM --state-reason "Prueba de notificación"
+```

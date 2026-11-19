@@ -62,3 +62,9 @@ variable "ssh_public_key" {
   description = "Llave pública SSH (contenido del .pub). Vacía = Terraform genera una y la guarda en un .pem local"
   default     = ""
 }
+
+variable "alarm_email" {
+  type        = string
+  description = "Correo que recibe las alarmas de CloudWatch (vía SNS). Vacío = sin suscripción"
+  default     = ""
+}

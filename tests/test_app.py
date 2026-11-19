@@ -8,13 +8,15 @@ from datetime import datetime
 import pytest
 
 import app as todo
+from metricas import Metricas
 
 
 @pytest.fixture
 def cliente(monkeypatch):
-    # Cada prueba empieza con una lista vacía y sin base de datos
+    # Cada prueba empieza con una lista vacía, sin base de datos y con métricas en cero
     monkeypatch.setattr(todo, "DB_SECRET_ID", None)
     monkeypatch.setattr(todo, "tareas_en_memoria", [])
+    monkeypatch.setattr(todo, "metricas", Metricas("Pruebas", "us-east-1"))
     todo.app.config["TESTING"] = True
     return todo.app.test_client()
 
@@ -96,3 +98,48 @@ def test_health_con_bd_caida_regresa_503(cliente, monkeypatch):
     assert respuesta.status_code == 503
     assert respuesta.get_json()["status"] == "FAIL"
     assert respuesta.get_json()["database"] == "FAIL"
+
+
+def metricas_enviadas(metricas):
+    """Convierte el MetricData acumulado en {nombre: valor} para revisarlo fácil."""
+    return {
+        dato["MetricName"]: dato.get("Value", dato.get("StatisticValues"))
+        for dato in metricas.tomar_datos()
+    }
+
+
+def test_metricas_cuentan_requests_y_latencia(cliente):
+    cliente.get("/tasks")
+    cliente.post("/tasks", json={"tarea": "medir"})
+
+    datos = metricas_enviadas(todo.metricas)
+
+    assert datos["Requests"] == 2
+    assert datos["Errores5xx"] == 0
+    assert datos["DBErrors"] == 0
+    assert datos["LatenciaMs"]["SampleCount"] == 2
+
+
+def test_error_de_bd_regresa_500_y_cuenta_dberrors_y_5xx(cliente, monkeypatch):
+    def conectar_falla():
+        raise OSError("connection refused")
+
+    monkeypatch.setattr(todo, "DB_SECRET_ID", "secreto-de-prueba")
+    monkeypatch.setattr(todo, "conectar", conectar_falla)
+
+    respuesta = cliente.get("/tasks")
+    datos = metricas_enviadas(todo.metricas)
+
+    assert respuesta.status_code == 500
+    assert datos["DBErrors"] == 1
+    assert datos["Errores5xx"] == 1
+
+
+def test_metricas_se_reinician_despues_de_enviar(cliente):
+    cliente.get("/tasks")
+    todo.metricas.tomar_datos()  # primer "envío"
+
+    datos = metricas_enviadas(todo.metricas)
+
+    assert datos["Requests"] == 0  # se siguen mandando en 0 para no dejar huecos
+    assert "LatenciaMs" not in datos

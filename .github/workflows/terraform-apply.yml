@@ -25,6 +25,8 @@ env:
   # Llave pública SSH fija (GitHub -> Settings -> Secrets and variables -> Actions -> Variables).
   # Su llave privada está en el secret SSH_PRIVATE_KEY y la usa el workflow de deploy.
   TF_VAR_ssh_public_key: ${{ vars.SSH_PUBLIC_KEY }}
+  # Correo que recibe las alarmas de CloudWatch (variable ALARM_EMAIL)
+  TF_VAR_alarm_email: ${{ vars.ALARM_EMAIL }}
 
 jobs:
   apply:
@@ -113,7 +115,9 @@ jobs:
             echo "| URL de la API | $URL |"
             echo "| Endpoint RDS | \`$(terraform output -raw db_endpoint)\` |"
             echo "| URL de versión | $(terraform output -raw version_url) |"
+            echo "| Dashboard CloudWatch | $(terraform output -raw dashboard_url) |"
             echo ""
             echo "Siguiente paso: guarda la IP en GitHub Secrets como **EC2_HOST**."
             echo "La app tarda 1 a 2 minutos más en arrancar (user_data)."
+            echo "Revisa tu correo y confirma la suscripción de SNS para recibir las alarmas."
           } >> "$GITHUB_STEP_SUMMARY"

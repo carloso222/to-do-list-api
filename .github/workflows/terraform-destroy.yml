@@ -23,6 +23,8 @@ env:
   # Llave pública SSH fija (GitHub -> Settings -> Secrets and variables -> Actions -> Variables).
   # Su llave privada está en el secret SSH_PRIVATE_KEY y la usa el workflow de deploy.
   TF_VAR_ssh_public_key: ${{ vars.SSH_PUBLIC_KEY }}
+  # Correo que recibe las alarmas de CloudWatch (variable ALARM_EMAIL)
+  TF_VAR_alarm_email: ${{ vars.ALARM_EMAIL }}
 
 jobs:
   destroy:
