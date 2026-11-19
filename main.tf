@@ -235,6 +235,11 @@ resource "aws_instance" "app" {
   # La app necesita que la BD y el secreto ya existan cuando arranca
   depends_on = [aws_secretsmanager_secret_version.db]
 
+  # La llave SSH solo se instala al crear la instancia: si cambia el key pair, hay que recrearla
+  lifecycle {
+    replace_triggered_by = [aws_key_pair.llave]
+  }
+
   tags = {
     Name = var.nombre
   }
