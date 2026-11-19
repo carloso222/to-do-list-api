@@ -7,6 +7,7 @@ API sencilla en Python + Flask para la actividad de EC2 (Desarrollo en la Nube, 
 | GET    | `/tasks` | Regresa la lista de tareas                                    |
 | POST   | `/tasks` | Agrega una tarea. Body: `{"tarea": "resolver actividad en equipo"}` |
 | GET    | `/version` | Versión desplegada (variable de ambiente `APP_VERSION`, `dev` por default) |
+| GET    | `/health` | Estado: conexión a la BD (`OK`/`FAIL`, con `SELECT 1`), versión y timestamp del servidor. HTTP 200 si está bien, 503 si la BD falla |
 
 Las tareas se guardan en PostgreSQL (Amazon RDS). La app lee las credenciales de AWS Secrets Manager (variable `DB_SECRET_ID`); si esa variable no existe, por ejemplo en tu compu, usa una lista en memoria.
 
@@ -129,6 +130,7 @@ git push origin v1.2.3 ──► Release (pytest + zip + GitHub Release) ──�
 |---|---|---|
 | `CI` (`ci.yml`) | PR hacia `main` (y push a `main`) | Corre `pytest`. La regla de protección de `main` exige el check **tests** |
 | `Release` (`release.yml`) | Push de un tag `v#.#.#` | Corre las pruebas, comprime el repo con `git archive` y crea el release con el zip. Después dispara el deploy |
+| `Monitoreo /health` (`monitoreo.yml`) | Cron cada 5 min (`schedule`), o a mano | Hace `GET /health` a la EC2 y falla si no responde 200. Solo corre si la variable `MONITOREO_ACTIVO` = `true` |
 | `Deploy a EC2` (`deploy.yml`) | Release publicado (o a mano con un tag) | Por SSH, la EC2 descarga el zip del release, instala dependencias, cambia `/opt/todo-app/current` y reinicia el servicio (`deploy/deploy.sh`) |
 
 Publicar una versión nueva:

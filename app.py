@@ -4,6 +4,7 @@ Endpoints:
     GET  /tasks    -> regresa la lista de tareas
     POST /tasks    -> agrega una tarea. Body JSON: {"tarea": "texto de la tarea"}
     GET  /version  -> regresa la versión desplegada (variable de ambiente APP_VERSION)
+    GET  /health   -> estado de la app: conexión a la BD (OK/FAIL), versión y hora del servidor
 
 Las credenciales de la base de datos NO están en el código: la app lee el secreto de
 AWS Secrets Manager cuyo nombre viene en la variable de entorno DB_SECRET_ID.
@@ -13,6 +14,7 @@ Si DB_SECRET_ID no está definida (por ejemplo, al correrla en tu compu), usa un
 """
 import json
 import os
+from datetime import datetime, timezone
 from functools import cache
 
 from flask import Flask, jsonify, request
@@ -65,6 +67,32 @@ def crear_tabla():
 @app.get("/version")
 def version():
     return jsonify({"version": APP_VERSION})
+
+
+@app.get("/health")
+def health():
+    """Health check: 200 si todo está bien, 503 si la base de datos no responde."""
+    if not DB_SECRET_ID:
+        estado_bd = "NO_CONFIGURADA"  # modo local con lista en memoria
+    else:
+        try:
+            with conectar() as conn:
+                conn.execute("SELECT 1").fetchone()
+            estado_bd = "OK"
+        except Exception:
+            # El detalle va al log del servidor (journalctl -u todo-app), no a la respuesta pública
+            app.logger.exception("Health check: falló la conexión a la base de datos")
+            estado_bd = "FAIL"
+
+    codigo = 503 if estado_bd == "FAIL" else 200
+    return jsonify(
+        {
+            "status": "OK" if codigo == 200 else "FAIL",
+            "database": estado_bd,
+            "version": APP_VERSION,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+    ), codigo
 
 
 @app.get("/tasks")
