@@ -8,9 +8,6 @@ __pycache__/
 *.pem
 *.ppk
 
-# IDs de los recursos creados por setup.sh
-.ec2-state
-
 # Terraform: el estado puede contener información sensible (incluye la llave privada)
 .terraform/
 *.tfstate

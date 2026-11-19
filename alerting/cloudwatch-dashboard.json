@@ -1,0 +1,241 @@
+{
+  "widgets": [
+    {
+      "height": 3,
+      "properties": {
+        "alarms": [
+          "arn:aws:cloudwatch:us-east-1:342058290607:alarm:to-do-list-api-ec2-cpu-alta",
+          "arn:aws:cloudwatch:us-east-1:342058290607:alarm:to-do-list-api-errores-bd",
+          "arn:aws:cloudwatch:us-east-1:342058290607:alarm:to-do-list-api-tasa-errores-5xx",
+          "arn:aws:cloudwatch:us-east-1:342058290607:alarm:to-do-list-api-latencia-alta"
+        ],
+        "title": "Estado de las alarmas"
+      },
+      "type": "alarm",
+      "width": 24,
+      "x": 0,
+      "y": 0
+    },
+    {
+      "height": 6,
+      "properties": {
+        "metrics": [
+          [
+            "ToDoListApi",
+            "Requests",
+            {
+              "label": "Requests"
+            }
+          ],
+          [
+            "ToDoListApi",
+            "Errores5xx",
+            {
+              "color": "#d62728",
+              "label": "Errores 5xx"
+            }
+          ]
+        ],
+        "period": 60,
+        "region": "us-east-1",
+        "stat": "Sum",
+        "title": "Requests y errores 5xx (por minuto)",
+        "view": "timeSeries"
+      },
+      "type": "metric",
+      "width": 12,
+      "x": 0,
+      "y": 3
+    },
+    {
+      "height": 6,
+      "properties": {
+        "annotations": {
+          "horizontal": [
+            {
+              "label": "Umbral de alarma (10%)",
+              "value": 10
+            }
+          ]
+        },
+        "metrics": [
+          [
+            {
+              "expression": "IF(r >= 5, 100 * e / r, 0)",
+              "id": "tasa",
+              "label": "Tasa de errores %"
+            }
+          ],
+          [
+            "ToDoListApi",
+            "Requests",
+            {
+              "id": "r",
+              "stat": "Sum",
+              "visible": false
+            }
+          ],
+          [
+            "ToDoListApi",
+            "Errores5xx",
+            {
+              "id": "e",
+              "stat": "Sum",
+              "visible": false
+            }
+          ]
+        ],
+        "period": 300,
+        "region": "us-east-1",
+        "title": "Tasa de errores 5xx (%)",
+        "view": "timeSeries",
+        "yAxis": {
+          "left": {
+            "min": 0
+          }
+        }
+      },
+      "type": "metric",
+      "width": 12,
+      "x": 12,
+      "y": 3
+    },
+    {
+      "height": 6,
+      "properties": {
+        "annotations": {
+          "horizontal": [
+            {
+              "label": "Umbral de alarma (1000 ms)",
+              "value": 1000
+            }
+          ]
+        },
+        "metrics": [
+          [
+            "ToDoListApi",
+            "LatenciaMs",
+            {
+              "label": "Promedio",
+              "stat": "Average"
+            }
+          ],
+          [
+            "ToDoListApi",
+            "LatenciaMs",
+            {
+              "label": "Máximo",
+              "stat": "Maximum"
+            }
+          ]
+        ],
+        "period": 60,
+        "region": "us-east-1",
+        "title": "Latencia de la API (ms)",
+        "view": "timeSeries"
+      },
+      "type": "metric",
+      "width": 12,
+      "x": 0,
+      "y": 9
+    },
+    {
+      "height": 6,
+      "properties": {
+        "metrics": [
+          [
+            "ToDoListApi",
+            "DBErrors",
+            {
+              "color": "#d62728",
+              "label": "DBErrors"
+            }
+          ]
+        ],
+        "period": 60,
+        "region": "us-east-1",
+        "stat": "Sum",
+        "title": "Errores de base de datos (por minuto)",
+        "view": "timeSeries"
+      },
+      "type": "metric",
+      "width": 12,
+      "x": 12,
+      "y": 9
+    },
+    {
+      "height": 6,
+      "properties": {
+        "annotations": {
+          "horizontal": [
+            {
+              "label": "Umbral de alarma (80%)",
+              "value": 80
+            }
+          ]
+        },
+        "metrics": [
+          [
+            "AWS/EC2",
+            "CPUUtilization",
+            "InstanceId",
+            "i-037afda7f3085b6a2",
+            {
+              "label": "CPU EC2"
+            }
+          ]
+        ],
+        "period": 300,
+        "region": "us-east-1",
+        "stat": "Average",
+        "title": "CPU de la EC2 (%)",
+        "view": "timeSeries",
+        "yAxis": {
+          "left": {
+            "max": 100,
+            "min": 0
+          }
+        }
+      },
+      "type": "metric",
+      "width": 12,
+      "x": 0,
+      "y": 15
+    },
+    {
+      "height": 6,
+      "properties": {
+        "metrics": [
+          [
+            "AWS/RDS",
+            "CPUUtilization",
+            "DBInstanceIdentifier",
+            "to-do-list-api-db",
+            {
+              "label": "CPU RDS (%)"
+            }
+          ],
+          [
+            "AWS/RDS",
+            "DatabaseConnections",
+            "DBInstanceIdentifier",
+            "to-do-list-api-db",
+            {
+              "label": "Conexiones",
+              "yAxis": "right"
+            }
+          ]
+        ],
+        "period": 300,
+        "region": "us-east-1",
+        "stat": "Average",
+        "title": "Base de datos RDS",
+        "view": "timeSeries"
+      },
+      "type": "metric",
+      "width": 12,
+      "x": 12,
+      "y": 15
+    }
+  ]
+}
