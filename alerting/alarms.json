@@ -1,0 +1,127 @@
+{
+  "MetricAlarms": [
+    {
+      "AlarmName": "to-do-list-api-ec2-cpu-alta",
+      "AlarmArn": "arn:aws:cloudwatch:us-east-1:342058290607:alarm:to-do-list-api-ec2-cpu-alta",
+      "AlarmDescription": "La CPU de la EC2 de la app supera el 80% en promedio durante 5 minutos",
+      "ActionsEnabled": true,
+      "OKActions": [
+        "arn:aws:sns:us-east-1:342058290607:to-do-list-api-alarmas"
+      ],
+      "AlarmActions": [
+        "arn:aws:sns:us-east-1:342058290607:to-do-list-api-alarmas"
+      ],
+      "InsufficientDataActions": [],
+      "MetricName": "CPUUtilization",
+      "Namespace": "AWS/EC2",
+      "Statistic": "Average",
+      "Dimensions": [
+        {
+          "Name": "InstanceId",
+          "Value": "i-037afda7f3085b6a2"
+        }
+      ],
+      "Period": 300,
+      "EvaluationPeriods": 1,
+      "Threshold": 80.0,
+      "ComparisonOperator": "GreaterThanThreshold",
+      "TreatMissingData": "notBreaching"
+    },
+    {
+      "AlarmName": "to-do-list-api-errores-bd",
+      "AlarmArn": "arn:aws:cloudwatch:us-east-1:342058290607:alarm:to-do-list-api-errores-bd",
+      "AlarmDescription": "La app tuvo 3 o más errores al usar la base de datos RDS en 5 minutos",
+      "ActionsEnabled": true,
+      "OKActions": [
+        "arn:aws:sns:us-east-1:342058290607:to-do-list-api-alarmas"
+      ],
+      "AlarmActions": [
+        "arn:aws:sns:us-east-1:342058290607:to-do-list-api-alarmas"
+      ],
+      "InsufficientDataActions": [],
+      "MetricName": "DBErrors",
+      "Namespace": "ToDoListApi",
+      "Statistic": "Sum",
+      "Dimensions": [],
+      "Period": 300,
+      "EvaluationPeriods": 1,
+      "Threshold": 3.0,
+      "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+      "TreatMissingData": "notBreaching"
+    },
+    {
+      "AlarmName": "to-do-list-api-latencia-alta",
+      "AlarmArn": "arn:aws:cloudwatch:us-east-1:342058290607:alarm:to-do-list-api-latencia-alta",
+      "AlarmDescription": "Los requests a la API tardan más de 1 segundo en promedio durante 5 minutos",
+      "ActionsEnabled": true,
+      "OKActions": [
+        "arn:aws:sns:us-east-1:342058290607:to-do-list-api-alarmas"
+      ],
+      "AlarmActions": [
+        "arn:aws:sns:us-east-1:342058290607:to-do-list-api-alarmas"
+      ],
+      "InsufficientDataActions": [],
+      "MetricName": "LatenciaMs",
+      "Namespace": "ToDoListApi",
+      "Statistic": "Average",
+      "Dimensions": [],
+      "Period": 300,
+      "EvaluationPeriods": 1,
+      "Threshold": 1000.0,
+      "ComparisonOperator": "GreaterThanThreshold",
+      "TreatMissingData": "notBreaching"
+    },
+    {
+      "AlarmName": "to-do-list-api-tasa-errores-5xx",
+      "AlarmArn": "arn:aws:cloudwatch:us-east-1:342058290607:alarm:to-do-list-api-tasa-errores-5xx",
+      "AlarmDescription": "Más del 10% de los requests a la API regresan error 5xx (5 minutos, mínimo 5 requests)",
+      "ActionsEnabled": true,
+      "OKActions": [
+        "arn:aws:sns:us-east-1:342058290607:to-do-list-api-alarmas"
+      ],
+      "AlarmActions": [
+        "arn:aws:sns:us-east-1:342058290607:to-do-list-api-alarmas"
+      ],
+      "InsufficientDataActions": [],
+      "Dimensions": [],
+      "EvaluationPeriods": 1,
+      "Threshold": 10.0,
+      "ComparisonOperator": "GreaterThanThreshold",
+      "TreatMissingData": "notBreaching",
+      "Metrics": [
+        {
+          "Id": "tasa",
+          "Expression": "IF(requests >= 5, 100 * errores / requests, 0)",
+          "Label": "Tasa de errores 5xx (%)",
+          "ReturnData": true
+        },
+        {
+          "Id": "errores",
+          "MetricStat": {
+            "Metric": {
+              "Namespace": "ToDoListApi",
+              "MetricName": "Errores5xx",
+              "Dimensions": []
+            },
+            "Period": 300,
+            "Stat": "Sum"
+          },
+          "ReturnData": false
+        },
+        {
+          "Id": "requests",
+          "MetricStat": {
+            "Metric": {
+              "Namespace": "ToDoListApi",
+              "MetricName": "Requests",
+              "Dimensions": []
+            },
+            "Period": 300,
+            "Stat": "Sum"
+          },
+          "ReturnData": false
+        }
+      ]
+    }
+  ]
+}
