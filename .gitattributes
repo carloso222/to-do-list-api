@@ -1,0 +1,2 @@
+# Los scripts de bash deben tener finales de línea de Linux (LF), si no Git Bash falla con "$'\r': command not found"
+*.sh text eol=lf

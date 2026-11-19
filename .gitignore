@@ -7,3 +7,6 @@ __pycache__/
 # Llaves privadas de AWS: NUNCA subirlas al repo
 *.pem
 *.ppk
+
+# IDs de los recursos creados por setup.sh
+.ec2-state
