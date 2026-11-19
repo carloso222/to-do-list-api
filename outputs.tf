@@ -37,3 +37,13 @@ output "version_url" {
   description = "URL del endpoint /version"
   value       = "http://${aws_instance.app.public_ip}:${var.app_port}/version"
 }
+
+output "dashboard_url" {
+  description = "Dashboard de CloudWatch"
+  value       = "https://${var.region}.console.aws.amazon.com/cloudwatch/home?region=${var.region}#dashboards/dashboard/${local.dashboard_name}"
+}
+
+output "sns_topic_arn" {
+  description = "Tópico SNS de las alarmas"
+  value       = aws_sns_topic.alarmas.arn
+}
