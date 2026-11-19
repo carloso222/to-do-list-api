@@ -1,0 +1,59 @@
+# Monitoreo: cada 5 minutos hace GET /health a la EC2. Si la respuesta no es 200, el workflow falla
+# (y GitHub te avisa por correo de la ejecución fallida).
+#
+# Notas sobre "schedule":
+#   - El cron está en UTC y solo corre desde la rama default (main).
+#   - 5 minutos es el intervalo mínimo; en horas de mucho uso GitHub puede retrasarlo varios minutos.
+#   - Para no recibir fallas cada 5 min cuando la infraestructura está destruida, el monitoreo solo
+#     corre si la variable MONITOREO_ACTIVO = true (Settings -> Secrets and variables -> Actions -> Variables).
+name: Monitoreo /health
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: # para probarlo a mano
+
+permissions:
+  contents: read
+
+concurrency:
+  group: monitoreo
+  cancel-in-progress: true
+
+jobs:
+  health:
+    if: vars.MONITOREO_ACTIVO == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: GET /health
+        env:
+          HOST: ${{ secrets.EC2_HOST }}
+        run: |
+          H=$(printf '%s' "$HOST" | tr -d '[:space:]')
+          if [ -z "$H" ]; then
+            echo "::error::Falta el secret EC2_HOST"
+            exit 1
+          fi
+          echo "::add-mask::$H"
+
+          # --retry: reintenta 2 veces ante errores de red o 5xx antes de declarar la falla
+          CODIGO=$(curl -sS -o respuesta.json -w '%{http_code}' \
+            --max-time 10 --retry 2 --retry-delay 5 \
+            "http://${H}:5000/health" || true)
+          RESPUESTA=$(cat respuesta.json 2>/dev/null || true)
+
+          echo "HTTP $CODIGO"
+          echo "$RESPUESTA"
+          {
+            echo "## Health check: HTTP ${CODIGO:-sin respuesta}"
+            echo ""
+            echo '```json'
+            echo "${RESPUESTA:-(sin respuesta)}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$CODIGO" != "200" ]; then
+            echo "::error::/health respondió HTTP ${CODIGO:-000} (se esperaba 200)"
+            exit 1
+          fi
