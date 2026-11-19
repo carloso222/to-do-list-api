@@ -2,22 +2,33 @@
 # Plantilla de user_data: Terraform reemplaza repo_url, app_port, region y db_secret_id antes de mandarla a EC2.
 # Corre UNA vez, como root, en el primer arranque de la instancia.
 # Log para depurar dentro de la instancia: /var/log/cloud-init-output.log
+#
+# Estructura en la instancia (la usa también deploy/deploy.sh en cada release):
+#   /opt/todo-app/venv             entorno virtual de Python (compartido)
+#   /opt/todo-app/releases/<ver>   código de cada versión
+#   /opt/todo-app/current          symlink a la versión activa
+#   /opt/todo-app/app.env          APP_VERSION de la versión activa
 set -euxo pipefail
 
 # 1. Instalar lo que la imagen de Ubuntu no trae (postgresql-client para conectarnos a RDS con psql)
 apt-get update -y
 DEBIAN_FRONTEND=noninteractive apt-get install -y git python3-venv python3-pip postgresql-client
 
-# 2. Clonar el repo
-git clone ${repo_url} /opt/todo-app
+# 2. Primera versión: clonar el repo (rama main)
+mkdir -p /opt/todo-app/releases
+git clone ${repo_url} /opt/todo-app/releases/inicial
+VERSION_INICIAL=$(git -C /opt/todo-app/releases/inicial describe --tags --always)
+ln -sfn /opt/todo-app/releases/inicial /opt/todo-app/current
+echo "APP_VERSION=$VERSION_INICIAL" > /opt/todo-app/app.env
 
 # 3. Instalar dependencias en un entorno virtual
 python3 -m venv /opt/todo-app/venv
-/opt/todo-app/venv/bin/pip install -r /opt/todo-app/requirements.txt
+/opt/todo-app/venv/bin/pip install -r /opt/todo-app/current/requirements.txt
 chown -R ubuntu:ubuntu /opt/todo-app
 
 # 4. Registrar la app como servicio de systemd para que arranque en cada boot.
 #    Solo le pasamos el NOMBRE del secreto; la app pide usuario y contraseña a Secrets Manager.
+#    APP_VERSION viene de /opt/todo-app/app.env, que actualiza cada deploy.
 cat > /etc/systemd/system/todo-app.service <<'SERVICE'
 [Unit]
 Description=API to-do list (Flask + RDS) en el puerto ${app_port}
@@ -26,9 +37,10 @@ Wants=network-online.target
 
 [Service]
 User=ubuntu
-WorkingDirectory=/opt/todo-app
+WorkingDirectory=/opt/todo-app/current
 Environment=DB_SECRET_ID=${db_secret_id}
 Environment=AWS_REGION=${region}
+EnvironmentFile=-/opt/todo-app/app.env
 ExecStart=/opt/todo-app/venv/bin/python app.py
 Restart=always
 RestartSec=5

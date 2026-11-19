@@ -58,21 +58,34 @@ locals {
 }
 
 # ---------- Key pair ----------
-# Terraform genera la llave, sube la pública a AWS y guarda la privada en un .pem local.
-# OJO: la llave privada también queda en terraform.tfstate; por eso el tfstate NO se sube al repo.
+# Opción A (GitHub Actions / CD): usas TU llave pública fija (variable ssh_public_key).
+#   La privada vive en GitHub Secrets (SSH_PRIVATE_KEY) y sirve para todos los sandboxes.
+# Opción B (si ssh_public_key viene vacía): Terraform genera una llave y guarda la privada
+#   en un .pem local. OJO: esa llave privada también queda en el tfstate.
+locals {
+  ssh_public_key = trimspace(var.ssh_public_key) # quita saltos de línea que se cuelan al pegarla
+}
+
 resource "tls_private_key" "llave" {
+  count     = local.ssh_public_key == "" ? 1 : 0
   algorithm = "ED25519"
 }
 
 resource "aws_key_pair" "llave" {
   key_name   = "${var.nombre}-key"
-  public_key = tls_private_key.llave.public_key_openssh
+  public_key = coalesce(local.ssh_public_key, one(tls_private_key.llave[*].public_key_openssh))
 }
 
 resource "local_sensitive_file" "llave_privada" {
+  count           = local.ssh_public_key == "" ? 1 : 0
   filename        = "${path.module}/${var.nombre}-key.pem"
-  content         = tls_private_key.llave.private_key_openssh
+  content         = tls_private_key.llave[0].private_key_openssh
   file_permission = "0400"
+}
+
+locals {
+  # Ruta de la llave privada para los comandos de los outputs
+  ruta_llave = coalesce(one(local_sensitive_file.llave_privada[*].filename), "~/.ssh/${var.nombre}")
 }
 
 # ---------- Security group ----------

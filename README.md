@@ -6,6 +6,7 @@ API sencilla en Python + Flask para la actividad de EC2 (Desarrollo en la Nube, 
 |--------|----------|---------------------------------------------------------------|
 | GET    | `/tasks` | Regresa la lista de tareas                                    |
 | POST   | `/tasks` | Agrega una tarea. Body: `{"tarea": "resolver actividad en equipo"}` |
+| GET    | `/version` | Versión desplegada (variable de ambiente `APP_VERSION`, `dev` por default) |
 
 Las tareas se guardan en PostgreSQL (Amazon RDS). La app lee las credenciales de AWS Secrets Manager (variable `DB_SECRET_ID`); si esa variable no existe, por ejemplo en tu compu, usa una lista en memoria.
 
@@ -98,9 +99,44 @@ Los dos se corren a mano desde la pestaña **Actions** (trigger `workflow_dispat
 | `AWS_SECRET_ACCESS_KEY` | De *AWS Details* en el Learner Lab |
 | `AWS_SESSION_TOKEN` | De *AWS Details* en el Learner Lab |
 | `EC2_HOST` | IP pública que muestra el workflow de apply al terminar |
+| `SSH_PRIVATE_KEY` | Llave privada SSH fija (`~/.ssh/to-do-list-api`), la usa el deploy |
+
+Y en la pestaña **Variables**: `SSH_PUBLIC_KEY` con el contenido de `~/.ssh/to-do-list-api.pub`.
 
 **Correr Terraform en tu compu** usando el mismo estado en S3:
 
 ```bash
 terraform init -reconfigure -backend-config="bucket=to-do-list-api-tfstate-<ID de la cuenta>"
 ```
+
+## Pruebas unitarias
+
+```bash
+pip install -r requirements-dev.txt
+pytest -v
+```
+
+Corren con la lista en memoria, así que no necesitan AWS.
+
+## CI/CD
+
+```
+PR a main ──► CI (pytest) ──► merge permitido solo si pasa
+git push origin v1.2.3 ──► Release (pytest + zip + GitHub Release) ──► Deploy a EC2
+```
+
+| Workflow | Trigger | Qué hace |
+|---|---|---|
+| `CI` (`ci.yml`) | PR hacia `main` (y push a `main`) | Corre `pytest`. La regla de protección de `main` exige el check **tests** |
+| `Release` (`release.yml`) | Push de un tag `v#.#.#` | Corre las pruebas, comprime el repo con `git archive` y crea el release con el zip. Después dispara el deploy |
+| `Deploy a EC2` (`deploy.yml`) | Release publicado (o a mano con un tag) | Por SSH, la EC2 descarga el zip del release, instala dependencias, cambia `/opt/todo-app/current` y reinicia el servicio (`deploy/deploy.sh`) |
+
+Publicar una versión nueva:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+curl http://<IP>:5000/version   # {"version": "v1.0.0"}
+```
+
+> Un release creado con `GITHUB_TOKEN` no dispara el evento `release` en otros workflows (GitHub lo evita para no generar ciclos), por eso `release.yml` lanza `deploy.yml` con `gh workflow run`.

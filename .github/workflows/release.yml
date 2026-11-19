@@ -1,0 +1,53 @@
+# Continuous Delivery: al empujar una etiqueta v#.#.# (ej. git tag v1.0.0 && git push origin v1.0.0)
+# 1) corre las pruebas, 2) crea un release en GitHub con el repo comprimido en zip,
+# 3) dispara el workflow "Deploy a EC2" con esa versión.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+
+permissions:
+  contents: write # crear el release
+  actions: write  # disparar el workflow de deploy
+
+jobs:
+  tests:
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    needs: tests
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v5
+
+      - name: Comprimir el repositorio en zip
+        run: |
+          # git archive empaqueta exactamente lo que hay en el commit del tag (sin .git, venv, tfstate, etc.)
+          git archive --format=zip --prefix=to-do-list-api/ -o "to-do-list-api-${TAG}.zip" HEAD
+          ls -lh "to-do-list-api-${TAG}.zip"
+
+      - name: Crear el release en GitHub
+        run: |
+          gh release create "$TAG" "to-do-list-api-${TAG}.zip" \
+            --title "$TAG" \
+            --generate-notes
+
+      - name: Disparar el deploy a EC2
+        # Un release creado con GITHUB_TOKEN NO dispara el evento "release" en otros workflows
+        # (GitHub lo evita para no crear ciclos), así que llamamos al deploy explícitamente.
+        run: gh workflow run deploy.yml --ref main -f tag="$TAG"
+
+      - name: Resumen
+        run: |
+          {
+            echo "## Release $TAG creado"
+            echo ""
+            echo "- Artefacto: \`to-do-list-api-${TAG}.zip\`"
+            echo "- Se disparó el workflow **Deploy a EC2** para esta versión."
+          } >> "$GITHUB_STEP_SUMMARY"

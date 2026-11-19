@@ -1,0 +1,69 @@
+# Continuous Deployment: al publicarse un release nuevo, la EC2 descarga el zip del release
+# y reinicia el servidor con esa versión (deploy/deploy.sh).
+# Se dispara con el evento "release" (si creas el release desde la página de GitHub),
+# desde el workflow de Release, o a mano desde Actions indicando el tag.
+#
+# Secrets necesarios: EC2_HOST (IP pública de la EC2) y SSH_PRIVATE_KEY (llave privada SSH).
+name: Deploy a EC2
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag del release a desplegar (ej. v1.0.0)"
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - name: Descargar el código (para deploy/deploy.sh)
+        uses: actions/checkout@v5
+
+      - name: Validar el tag
+        run: |
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::El tag '$TAG' no tiene el formato v#.#.#"
+            exit 1
+          fi
+          echo "ZIP_URL=https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/to-do-list-api-${TAG}.zip" >> "$GITHUB_ENV"
+
+      - name: Preparar SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          HOST: ${{ secrets.EC2_HOST }}
+        run: |
+          H=$(printf '%s' "$HOST" | tr -d '[:space:]')
+          if [ -z "$H" ] || [ -z "$SSH_PRIVATE_KEY" ]; then
+            echo "::error::Faltan los secrets EC2_HOST o SSH_PRIVATE_KEY"
+            exit 1
+          fi
+          echo "::add-mask::$H"
+          echo "EC2_HOST=$H" >> "$GITHUB_ENV"
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -T 15 -H "$H" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Desplegar en la EC2
+        run: |
+          ssh -i ~/.ssh/deploy_key -o ConnectTimeout=15 "ubuntu@${EC2_HOST}" \
+            "sudo bash -s -- '${TAG}' '${ZIP_URL}'" < deploy/deploy.sh
+
+      - name: Verificar /version desde Internet
+        run: |
+          RESPUESTA=$(curl -fsS --retry 5 --retry-delay 3 --retry-all-errors "http://${EC2_HOST}:5000/version")
+          echo "$RESPUESTA"
+          echo "$RESPUESTA" | grep -q "\"$TAG\"" || { echo "::error::La versión desplegada no es $TAG"; exit 1; }
+          echo "## Desplegado $TAG en la EC2" >> "$GITHUB_STEP_SUMMARY"

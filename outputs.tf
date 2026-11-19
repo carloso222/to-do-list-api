@@ -15,7 +15,7 @@ output "url_tasks" {
 
 output "ssh" {
   description = "Comando para conectarse por SSH"
-  value       = "ssh -i ${local_sensitive_file.llave_privada.filename} ubuntu@${aws_instance.app.public_ip}"
+  value       = "ssh -i ${local.ruta_llave} ubuntu@${aws_instance.app.public_ip}"
 }
 
 output "db_endpoint" {
@@ -30,5 +30,10 @@ output "db_secret_name" {
 
 output "consultar_db" {
   description = "Comando (Git Bash) para correr SELECT * FROM tasks en la BD a través de la EC2"
-  value       = "ssh -i ${local_sensitive_file.llave_privada.filename} ubuntu@${aws_instance.app.public_ip} \"todo-db -c 'SELECT * FROM tasks;'\""
+  value       = "ssh -i ${local.ruta_llave} ubuntu@${aws_instance.app.public_ip} \"todo-db -c 'SELECT * FROM tasks;'\""
+}
+
+output "version_url" {
+  description = "URL del endpoint /version"
+  value       = "http://${aws_instance.app.public_ip}:${var.app_port}/version"
 }

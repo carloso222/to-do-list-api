@@ -1,0 +1,37 @@
+# Continuous Integration: corre las pruebas unitarias en cada PR hacia main.
+# Con la regla de protección de la rama main (check requerido "tests"), un PR solo se puede
+# integrar si este workflow pasa. También lo reutiliza el workflow de Release (workflow_call).
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v5
+
+      - name: Instalar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Instalar dependencias
+        run: pip install -r requirements-dev.txt
+
+      - name: Correr pruebas unitarias
+        run: pytest -v

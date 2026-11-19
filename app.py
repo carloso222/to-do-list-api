@@ -1,8 +1,9 @@
 """API sencilla de lista de tareas (to-do list) con Flask + PostgreSQL (Amazon RDS).
 
 Endpoints:
-    GET  /tasks  -> regresa la lista de tareas
-    POST /tasks  -> agrega una tarea. Body JSON: {"tarea": "texto de la tarea"}
+    GET  /tasks    -> regresa la lista de tareas
+    POST /tasks    -> agrega una tarea. Body JSON: {"tarea": "texto de la tarea"}
+    GET  /version  -> regresa la versión desplegada (variable de ambiente APP_VERSION)
 
 Las credenciales de la base de datos NO están en el código: la app lee el secreto de
 AWS Secrets Manager cuyo nombre viene en la variable de entorno DB_SECRET_ID.
@@ -20,6 +21,8 @@ app = Flask(__name__)
 
 DB_SECRET_ID = os.environ.get("DB_SECRET_ID")
 AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
+# La pone el deploy (el tag del release, ej. v1.0.0). Si no existe, estamos en desarrollo.
+APP_VERSION = os.environ.get("APP_VERSION", "dev")
 
 tareas_en_memoria = []  # solo se usa si no hay base de datos configurada
 
@@ -57,6 +60,11 @@ def crear_tabla():
             )
             """
         )
+
+
+@app.get("/version")
+def version():
+    return jsonify({"version": APP_VERSION})
 
 
 @app.get("/tasks")

@@ -56,3 +56,9 @@ variable "ssh_cidr" {
     error_message = "ssh_cidr debe ser un CIDR válido, por ejemplo 189.1.2.3/32 o 0.0.0.0/0."
   }
 }
+
+variable "ssh_public_key" {
+  type        = string
+  description = "Llave pública SSH (contenido del .pub). Vacía = Terraform genera una y la guarda en un .pem local"
+  default     = ""
+}

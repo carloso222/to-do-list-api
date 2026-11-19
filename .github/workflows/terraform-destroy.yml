@@ -20,6 +20,9 @@ env:
   AWS_REGION: us-east-1
   AWS_DEFAULT_REGION: us-east-1
   TF_IN_AUTOMATION: "true"
+  # Llave pública SSH fija (GitHub -> Settings -> Secrets and variables -> Actions -> Variables).
+  # Su llave privada está en el secret SSH_PRIVATE_KEY y la usa el workflow de deploy.
+  TF_VAR_ssh_public_key: ${{ vars.SSH_PUBLIC_KEY }}
 
 jobs:
   destroy:

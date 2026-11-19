@@ -22,6 +22,9 @@ env:
   AWS_REGION: us-east-1
   AWS_DEFAULT_REGION: us-east-1
   TF_IN_AUTOMATION: "true"
+  # Llave pública SSH fija (GitHub -> Settings -> Secrets and variables -> Actions -> Variables).
+  # Su llave privada está en el secret SSH_PRIVATE_KEY y la usa el workflow de deploy.
+  TF_VAR_ssh_public_key: ${{ vars.SSH_PUBLIC_KEY }}
 
 jobs:
   apply:
@@ -97,6 +100,9 @@ jobs:
           IP=$(terraform output -raw public_ip)
           URL=$(terraform output -raw url_tasks)
           echo "IP pública de la EC2: $IP"
+          if [ -z "$TF_VAR_ssh_public_key" ]; then
+            echo "::warning::No está la variable SSH_PUBLIC_KEY: el workflow de deploy no podrá entrar por SSH a la EC2."
+          fi
           echo "URL: $URL"
           {
             echo "## Infraestructura creada"
@@ -106,6 +112,7 @@ jobs:
             echo "| IP pública EC2 | \`$IP\` |"
             echo "| URL de la API | $URL |"
             echo "| Endpoint RDS | \`$(terraform output -raw db_endpoint)\` |"
+            echo "| URL de versión | $(terraform output -raw version_url) |"
             echo ""
             echo "Siguiente paso: guarda la IP en GitHub Secrets como **EC2_HOST**."
             echo "La app tarda 1 a 2 minutos más en arrancar (user_data)."
